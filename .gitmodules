@@ -1,0 +1,3 @@
+[submodule "fflowlab"]
+	path = fflowlab
+	url = https://github.com/datasci-info/fflowlab.git
