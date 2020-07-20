@@ -2,7 +2,6 @@ name: stock_path_tracker
 channels:
 - anaconda
 - conda-forge
-
 dependencies:
 - python=3.8.0
 - pandas==0.25.3
@@ -16,5 +15,5 @@ dependencies:
 - pip==20.1.1
 - pip:
         - dolphindb==0.1.15.20
-        - -r fflowlab/requirements.txt
-        - fflowlab/.
+#         - -r fflowlab/requirements.txt
+#         - fflowlab/.
