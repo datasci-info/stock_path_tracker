@@ -98,7 +98,7 @@ def cal_cost(var_lambda, var_tau, df_cost):
     print(c1, c2)
     return cost
 
-def optimize(var_lambda, var_tau, df_cost):
+def optimize(var_lambda, var_tau, df_cost, prob_delta_cell):
     prob = get_realizations(var_lambda, var_tau).pipe(get_prob, prob_delta_cell)
     profit = cal_profit(var_lambda)
     cost = cal_cost(var_lambda, var_tau, df_cost)
