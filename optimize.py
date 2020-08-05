@@ -84,7 +84,7 @@ def get_all_txo_call_lambda(row):
 
 def get_cost(df, cost_cutoff):
     df_call = pd.concat([get_all_txo_call_lambda(row) for row in df.itertuples()])
-    df_cost = df_call.groupby(['d2m', 'lamb']).opt_price.apply(lambda x: x.quantile(cfg.CUTOFF_COST)).reset_index()
+    df_cost = df_call.groupby(['d2m', 'lamb']).opt_price.apply(lambda x: x.quantile(cost_cutoff)).reset_index()
     df_cost.columns = ['d2m', 'lambd', 'opt_price']
     return df_cost
 
