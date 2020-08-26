@@ -14,7 +14,8 @@ import pandas as pd
 def get_df():
     twse = pd.read_msgpack('/data/dataset/twse.msgpack')
     df = twse[cfg.D_START:][['close']].copy()
-    df['prc_qtz'] = df.close // cfg.SIZE_CELL * cfg.SIZE_CELL
+    df['close_prev'] = df.close.shift(1)
+    df['prc_qtz'] = df.close_prev // cfg.SIZE_CELL * cfg.SIZE_CELL
     df['delta'] = df.prc_qtz.diff()
     settlements = pd.to_datetime(pd.read_csv('settlement_txf.csv').settlement).dt.date.tolist()
     df['maturity'] = df.index.where(df.index.isin(settlements)).to_series().fillna(method='bfill').values
@@ -64,7 +65,7 @@ def get_all_txo_opt_price(date, maturity, right):
     assert date >= '2015.01.05', 'date before 2015.01.05 has no data of normal trading sessions'
     previous_date = get_previous_date(date)
     df_opt = sess.run(f'''
-    select Date as date, SettleDate as maturity, StrikePrice as strike, SettlePrice as opt_price
+    select Date as date, SettleDate as maturity, StrikePrice as strike, SettlePrice as opt_price, LastBestAskPrice as opt_price_ask, LastBestBidPrice as opt_price_bid
     from txo 
     where TradingSession=`Norm and Right=`{right} and SettleDate=`{maturity} and Date=date(`{previous_date});
     ''')
