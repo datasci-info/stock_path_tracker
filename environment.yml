@@ -18,3 +18,4 @@ dependencies:
 - pip:
         - dolphindb==0.1.15.20
         - ortools==7.7.7810
+        - git+https://github.com/datasci-info/fflowlab.git

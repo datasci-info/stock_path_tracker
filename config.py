@@ -5,3 +5,5 @@ MAX_D2M = 13
 SIZE_CELL = 100
 RIGHT = 'Call'
 CUTOFF_COST = 0.5
+
+PATH_SETTLEMENTS = 'settlement_txf.csv'
