@@ -7,3 +7,4 @@ RIGHT = 'Call'
 CUTOFF_COST = 0.5
 
 PATH_SETTLEMENTS = 'settlement_txf.csv'
+

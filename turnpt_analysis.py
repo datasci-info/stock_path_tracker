@@ -47,18 +47,12 @@ import matplotlib.pylab as plt
 import datetime
 import seaborn as sns
 
-# %% [markdown]
-# ## pararmeter
-
-# %%
-N = 1
-
-# %% [markdown]
-# ## turn tick data into daily data
-
 # %%
 import config as cfg
+from findataflow.dataprocs import resample
 
+
+# %%
 def get_maturity(series_date):
     settlements = pd.to_datetime(pd.read_csv(cfg.PATH_SETTLEMENTS).settlement).dt.date
     maturities = series_date.where(series_date.isin(settlements)).fillna(method='bfill')
@@ -66,23 +60,17 @@ def get_maturity(series_date):
     return maturities
 
 
-
 # %%
-from findataflow.dataprocs import resample
-
-# %%
-df_ohlc = resample.get_OHLCV_given_frequency(symbol='TXF', freq='1D')
-df_ohlc.reset_index(inplace=True)
-df_ohlc.rename(columns={'index': 'tx_datetime'}, inplace=True)
-df_ohlc['tx_datetime'] = df_ohlc.tx_datetime.dt.date
-df_ohlc.loc[df_ohlc.shape[0]] = [datetime.date(2014,3,19), 8734, 8742, 8684, 8696, np.nan]#TODO: no data
-df_ohlc.sort_values('tx_datetime', inplace=True)
-df_ohlc['maturity'] = get_maturity(df_ohlc.tx_datetime)
-df_ohlc['day_to_maturity'] = (df_ohlc.tx_datetime - df_ohlc.maturity).dt.days
-df_ohlc.head();
-
-# %%
-df_ohlc.tail();
+def get_daily_TXF_OHLC():
+    df_ohlc = resample.get_OHLCV_given_frequency(symbol='TXF', freq='1D')
+    df_ohlc.reset_index(inplace=True)
+    df_ohlc.rename(columns={'index': 'tx_datetime'}, inplace=True)
+    df_ohlc['tx_datetime'] = df_ohlc.tx_datetime.dt.date
+    df_ohlc.loc[df_ohlc.shape[0]] = [datetime.date(2014,3,19), 8734, 8742, 8684, 8696, np.nan]#TODO: no data
+    df_ohlc.sort_values('tx_datetime', inplace=True)
+    df_ohlc['maturity'] = get_maturity(df_ohlc.tx_datetime)
+    df_ohlc['day_to_maturity'] = (df_ohlc.tx_datetime - df_ohlc.maturity).dt.days
+    return df_ohlc
 
 
 # %% [markdown]
@@ -121,6 +109,9 @@ def get_combined_turnpt(df_turnpt_ohlc):
     df['same_direction'] = np.where((df.is_turnpt * df.is_turnpt.shift(1)) == -1, 1, 0).cumsum()
     df_turnpt_combined = df.groupby('same_direction', as_index=False).apply(get_extreme).reset_index(drop=True)
     
+    if df_turnpt_combined.empty:
+        return pd.DataFrame(columns=df_turnpt_ohlc.columns)
+    
     common_columns = ['tx_datetime', 'N']
     df_turnpt_combined = df_turnpt_combined[common_columns+['is_turnpt_upward', 'is_turnpt_downward', 'is_turnpt']]
     df_turnpt_ohlc = df_turnpt_ohlc[common_columns + [col for col in df_turnpt_ohlc.columns if col not in df_turnpt_combined.columns]]
@@ -140,33 +131,37 @@ def plot_turnpt(df_turnpt_ohlc, N):
     df_plot.close.plot.line(figsize=(20, 5), color='black', markevery=find_loc(df_plot, dates_downward), marker='v', markerfacecolor='green', markeredgewidth=0.0)
     plt.title(f'N: {N}')
     
-def get_prc_diff(dt_start, dt_end):
-    if dt_end is np.nan:
-        return np.nan
-    prc_start = df_ohlc[df_ohlc.tx_datetime.isin([dt_start])].close.values[0]
-    prc_end = df_ohlc[df_ohlc.tx_datetime.isin([dt_end])].close.values[0]
-    prc_diff = prc_end - prc_start
-    return prc_diff
 
-def get_turnpt_magnitude(df_turnpt_ohlc_combined, N):
+def get_turnpt_magnitude(df_turnpt, N):
+    def get_prc_diff(dt_start, dt_end):
+        if dt_end is np.nan:
+            return np.nan
+        prc_start = df_turnpt[df_turnpt.tx_datetime.isin([dt_start])].close.values[0]
+        prc_end = df_turnpt[df_turnpt.tx_datetime.isin([dt_end])].close.values[0]
+        prc_diff = prc_end - prc_start
+        return prc_diff
     idx_columns = ['tx_datetime', 'maturity']
 
-    df_m = df_turnpt_ohlc_combined.query(f'(N == {N}) and (is_turnpt != 0)')[idx_columns].copy()
+    df_m = df_turnpt.query(f'(N == {N}) and (is_turnpt != 0)')[idx_columns].copy()
     df_m['next_dt_turnpt'] = df_m.tx_datetime.shift(-1).fillna(df_m.tx_datetime.max())#.fillna(df_m.maturity.max())
     df_m['prc_diff'] = df_m.apply(lambda x: get_prc_diff(x.tx_datetime, x.next_dt_turnpt), axis=1)
     df_m['duration'] = (df_m.next_dt_turnpt - df_m.tx_datetime).dt.days
     df_m['slope'] = df_m.prc_diff.div(df_m.duration)
-    df_m = df_turnpt_ohlc_combined.merge(df_m, on = idx_columns, how= 'left')    
+    df_m = df_turnpt.merge(df_m, on = idx_columns, how= 'left')    
     return df_m
 
 
 # %%
 def get_df_turnpt_measures(N):
-    df_turnpt = df_ohlc.groupby('maturity', as_index=False).apply(lambda x: get_marked_turnpt(x, N))
-    df_turnpt_ohlc =  df_turnpt.merge(df_ohlc, on='tx_datetime', how='left')
-    df_turnpt_ohlc_combined = df_turnpt_ohlc.groupby('maturity', as_index=False).apply(get_combined_turnpt)
-    df_turnpt_measures = df_turnpt_ohlc_combined.groupby('maturity', as_index=False).apply(lambda x: get_turnpt_magnitude(x, N))
-    return df_turnpt_measures
+    df_ohlc = get_daily_TXF_OHLC()
+    df_turnpt = (
+        df_ohlc.
+        groupby('maturity', as_index=False).apply(lambda x: get_marked_turnpt(x, N)).
+        merge(df_ohlc, on='tx_datetime', how='left').
+        groupby('maturity', as_index=False).apply(get_combined_turnpt).
+        groupby('maturity', as_index=False).apply(lambda x: get_turnpt_magnitude(x, N))
+    )
+    return df_turnpt
 
 def analysis(df):
     df = df.query('turn == 1').copy()
@@ -178,6 +173,8 @@ def analysis(df):
     return df_res
 
 def plot_measure(df_turnpt_measures):
+    assert df_turnpt_measures.N.nunique() == 1, 'df_turnpt should have only 1 N'
+    N = df_turnpt_measures.N.iloc[0]
     df_analysis = pd.melt(df_turnpt_measures, id_vars=[col for col in df_turnpt_measures.columns if col not in ['is_turnpt_upward', 'is_turnpt_downward']], var_name = 'direction', value_name='turn')
     idx_columns = ['N', 'direction', 'day_to_maturity']
     df_summary = df_analysis.groupby(idx_columns).apply(analysis).reset_index(idx_columns)
@@ -187,57 +184,19 @@ def plot_measure(df_turnpt_measures):
         df_summary.set_index(['direction', 'day_to_maturity'])[col].unstack('direction').plot.bar(figsize=(15, 5), title=f'{col} at N={N}')
     plt.show()
 
-# %%
-# dfs = {N: get_df_turnpt_measures(N) for N in [1, 2]}
 
 # %%
-# plot_measure(dfs[1])
-# plot_measure(dfs[2])
+# # test 
+# df_ohlc = get_daily_TXF_OHLC()
+# n1_upward = df_ohlc.groupby('maturity', as_index=False).apply(lambda x: get_marked_turnpt(x, 1)).is_turnpt_upward.sum()
+# n2_upward = df_ohlc.groupby('maturity', as_index=False).apply(lambda x: get_marked_turnpt(x, 2)).is_turnpt_upward.sum()
+# assert n1_upward == 457 and n2_upward == 256
 
 # %%
-
-# %% [markdown]
-# # dev
-
-# %%
-# df_turnpt = df_ohlc.groupby('maturity', as_index=False).apply(lambda x: get_marked_turnpt(x, N))
-# df_turnpt_ohlc =  df_turnpt.merge(df_ohlc, on='tx_datetime', how='left')
-# df_turnpt_ohlc_combined = df_turnpt_ohlc.groupby('maturity', as_index=False).apply(get_combined_turnpt)
-
-# df_turnpt_measures = df_turnpt_ohlc_combined.groupby('maturity', as_index=False).apply(lambda x: get_turnpt_magnitude(x, N))
-
-# plot_turnpt(df_turnpt_measures, N)
-
-# # upward
-# df_plot_turn_upward = df_turnpt_measures.query('is_turnpt_upward == 1')
-# assert (df_plot_turn_upward.prc_diff < 0).sum() == 0, 'all prc diff must be greater than zero'
-# df_plot_turn_upward.boxplot('prc_diff', by = 'day_to_maturity', figsize = (15, 5))
-# df_plot_turn_upward.boxplot('duration', by = 'day_to_maturity', figsize = (15, 5))
-# df_plot_turn_upward.boxplot('slope', by = 'day_to_maturity', figsize = (15, 5))
-
-# # downward
-# df_plot_turn_downward = df_turnpt_measures.query('is_turnpt_downward == 1')
-# assert (df_plot_turn_downward.prc_diff > 0).sum() == 0, 'all prc diff must be smaller than zero'
-# df_plot_turn_downward.boxplot('prc_diff', by = 'day_to_maturity', figsize = (15, 5))
-# df_plot_turn_downward.boxplot('duration', by = 'day_to_maturity', figsize = (15, 5))
-# df_plot_turn_downward.boxplot('slope', by = 'day_to_maturity', figsize = (15, 5))
-
-# def analysis(df):
-#     df = df.query('turn == 1').copy()
-#     df_res = pd.DataFrame(index=[0])
-#     df_res['n_turn'] = df.shape[0]
-#     df_res['prc_diff'] = df.prc_diff.mean()
-#     df_res['duration'] = df.duration.mean()
-#     df_res['slope'] = df.slope.mean()
-#     return df_res
-# df_analysis = pd.melt(df_turnpt_measures, id_vars=[col for col in df_turnpt_measures.columns if col not in ['is_turnpt_upward', 'is_turnpt_downward']], var_name = 'direction', value_name='turn')
-# idx_columns = ['N', 'direction', 'day_to_maturity']
-# df_summary = df_analysis.groupby(idx_columns).apply(analysis).reset_index(idx_columns)
-
-# for col in df_summary.columns:
-#     if col in idx_columns:
-#         continue
-#     df_summary.set_index(['direction', 'day_to_maturity'])[col].unstack('direction').plot.bar(figsize=(15, 5), title=f'{col} at N={N}')
+if __name__ == '__main__':
+    dfs = {N: get_df_turnpt_measures(N) for N in [1, 2, 3, 5, 10]}
+    plot_measure(dfs[1])
+    plot_measure(dfs[2])
 
 # %% [markdown]
 # # which N is the best?
