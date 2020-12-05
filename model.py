@@ -17,6 +17,8 @@ import numpy as np
 from catboost import CatBoostClassifier, Pool
 from catboost import CatBoostRegressor
 
+import pickle, io
+
 def get_model(N=1,DIRECTION='is_turnpt_upward',PCT_TRAIN=0.75,N_ITERATIONS=10**5,DEPTH=10,LEARNING_RATE=0.5,LOSS_FUNCTION='RMSE',L2_LEAF_REG=202,OD_TYPE='Iter',OD_WAIT=250):
   df_features = get_featrues(specs)
   df_features.index = df_features.index.date
@@ -75,6 +77,11 @@ def get_model(N=1,DIRECTION='is_turnpt_upward',PCT_TRAIN=0.75,N_ITERATIONS=10**5
   import pandas as pd
 
   df_pred = pd.DataFrame({'pred': model.predict(test_pool), 'y': y_test})
+
+  n = params['N']
+  DIR = params['DIRECTION']
+  with open(f"models/model_{n}_{DIR}.pickle", 'wb+') as f:
+    pickle.dump(model, f, protocol=pickle.HIGHEST_PROTOCOL)
   # df_pred.head()
   # df_pred.pred.hist()
   # df_pred.y.hist()
@@ -97,16 +104,8 @@ def get_param_from_env():
 
   return {'N': N, 'DIRECTION':DIRECTION,'PCT_TRAIN':PCT_TRAIN,'N_ITERATIONS':N_ITERATIONS,'DEPTH':DEPTH,'LEARNING_RATE':LEARNING_RATE,'LOSS_FUNCTION':LOSS_FUNCTION,'L2_LEAF_REG':L2_LEAF_REG,'OD_TYPE':OD_TYPE,'OD_WAIT':OD_WAIT}
 
-import pickle
-import io
 
 if __name__ == "__main__":
   params = get_param_from_env()
   model = get_model(**params)
   
-  n = params['N']
-  DIR = params['DIRECTION']
-  with open(f"models/model_{n}_{DIR}.pickle", 'wb+') as f:
-    pickle.dump(model, f, protocol=pickle.HIGHEST_PROTOCOL)
-  
-

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 DIRS=('is_turnpt_upward' 'is_turnpt_downward')
-Ns=(1 2 3 5 7 10)
+Ns=(1 2 3 5)
 
 for direction in "${DIRS[@]}"
 do
@@ -9,6 +9,7 @@ do
     do
         export N=$n
         export DIRECTION=$direction
+        export LEARNING_RATE=0.1
         python model.py  > models/${N}_${direction}.log 2>&1 &
     done
 
