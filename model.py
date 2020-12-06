@@ -19,9 +19,10 @@ from catboost import CatBoostRegressor
 
 import pickle, io
 
-def get_model(N=1,DIRECTION='is_turnpt_upward',PCT_TRAIN=0.75,N_ITERATIONS=10**5,DEPTH=10,LEARNING_RATE=0.5,LOSS_FUNCTION='RMSE',L2_LEAF_REG=202,OD_TYPE='Iter',OD_WAIT=250):
+def get_model(N=1,DIRECTION='is_turnpt',PCT_TRAIN=0.75,N_ITERATIONS=10**5,DEPTH=10,LEARNING_RATE=0.5,LOSS_FUNCTION='RMSE',L2_LEAF_REG=202,OD_TYPE='Iter',OD_WAIT=250):
   df_features = get_featrues(specs)
   df_features.index = df_features.index.date
+  df_features = df_features.shift(1)
   # df_features.head()
   # df_features.shape
 
@@ -37,6 +38,12 @@ def get_model(N=1,DIRECTION='is_turnpt_upward',PCT_TRAIN=0.75,N_ITERATIONS=10**5
 
   ### DATA ###
   df = df_chosen_y.join(df_features).dropna()
+  w = (
+    df[[DIRECTION]].join(df_y.prc_diff).
+    assign(weight = lambda x: 1+np.where(x.is_turnpt==0, 0, x.prc_diff.abs())).
+    weight
+  )
+
   #df.head()
   #df.shape
 
@@ -49,17 +56,20 @@ def get_model(N=1,DIRECTION='is_turnpt_upward',PCT_TRAIN=0.75,N_ITERATIONS=10**5
   y_train = y[: num_train]
   y_test = y[num_train:]
 
+  w_train = w[: num_train]
+  w_test = w[num_train:]
+
   X = df.iloc[:, 1:]
   X_train = X.iloc[:num_train, :]
   X_test = X.iloc[num_train:, :]
 
-  train_pool = Pool(X_train, y_train, weight=y_train.abs()+1)
-  test_pool = Pool(X_test, y_test, weight=y_test.abs()+1)
+  train_pool = Pool(X_train, y_train, weight=w_train)
+  test_pool = Pool(X_test, y_test, weight=w_test)
 
   model = CatBoostClassifier(iterations=N_ITERATIONS, # set very large number and set early stops
                             depth=DEPTH, #fine-tune
                             learning_rate=LEARNING_RATE, #max: 0.5
-  #                           loss_function=LOSS_FUNCTION, 
+                            loss_function=LOSS_FUNCTION, 
                             l2_leaf_reg = L2_LEAF_REG, #fine-tune
                             od_type = OD_TYPE,
                             od_wait = OD_WAIT
@@ -90,14 +100,14 @@ def get_model(N=1,DIRECTION='is_turnpt_upward',PCT_TRAIN=0.75,N_ITERATIONS=10**5
 def get_param_from_env():
   N = int(os.environ.get('N', '1'))
 
-  DIRECTION = os.environ.get('DIRECTION', 'is_turnpt_downward')
+  DIRECTION = os.environ.get('DIRECTION', 'is_turnpt')
 
   PCT_TRAIN = eval(os.environ.get('PCT_TRAIN','0.75'))
 
   N_ITERATIONS = eval(os.environ.get('N_ITER', '10**5'))
   DEPTH = eval(os.environ.get('DEPTH', '10'))
   LEARNING_RATE = eval(os.environ.get('LEARNING_RATE','0.5'))
-  LOSS_FUNCTION = os.environ.get('LOSS_FUNCTION','RMSE')
+  LOSS_FUNCTION = os.environ.get('LOSS_FUNCTION','MultiClass')
   L2_LEAF_REG = eval(os.environ.get('L2_LEAF_REG','202'))
   OD_TYPE = os.environ.get('OD_TYPE','Iter')
   OD_WAIT = eval(os.environ.get('OD_WAIT','250'))
