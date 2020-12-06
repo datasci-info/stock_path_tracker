@@ -335,25 +335,39 @@ def get_single_feature(spec):
     )
     return df_feature
 
-def get_featrues(specs, nlags=5):
-    df_features = pd.concat([
-        get_single_feature(spec).pipe(fg.extend_by_nlags, spec='', nlags=nlags)
-        for spec in specs
-    ], axis=1)
-    
-    colnames = []
-    for idx_spec in range(len(specs)):
-        colnames += list(map(lambda x: f'{idx_spec}_{x}', df_features.columns[idx_spec*nlags: (idx_spec+1)*nlags]))
-    df_features.columns = colnames
-    
+def get_featrues(specs, nlags=5, cache=False, add_diff=False):
+    if not cache:
+        df_features = pd.concat([
+            get_single_feature(spec).pipe(fg.extend_by_nlags, spec='', nlags=nlags)
+            for spec in specs
+        ], axis=1)
+
+        colnames = []
+        for idx_spec in range(len(specs)):
+            colnames += list(map(lambda x: f'{idx_spec}_{x}', df_features.columns[idx_spec*nlags: (idx_spec+1)*nlags]))
+        df_features.columns = colnames
+        if add_diff:
+            df_features = add_diff(df_features)
+        df_features.to_csv('X.csv', index=True)
+    else:
+        df_features = pd.read_csv('X.csv', index_col=0)
+        df_features.index = pd.to_datetime(df_features.index, format='%Y-%m-%d %H:%M:%S')
     return df_features
+
+from itertools import combinations
+def add_diff(df_features):
+    df = df_features.copy()
+    for i,j in combinations(df_features.columns, 2):
+        df[f'diff_{i}_{j}'] = df[i] - df[j]
+    return df
 
 
 # %%
 if __name__ == '__main__':
     nlags=5
-    df_features = get_featrues(specs, nlags)
-    assert df_features.shape[1] == len(specs) * nlags
+    df_features = get_featrues(specs, nlags, add_diff=False)
+#     assert df_features.shape[1] == len(specs) * nlags
+    
 
 
 

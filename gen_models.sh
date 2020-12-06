@@ -1,14 +1,14 @@
 #!/bin/bash
 
 DIRS=('is_turnpt')
-Ns=(4)
+Ns=(5)
 # DEPTHs=(5 10 20)
 # L2_LEAF_REGs=(100 200 300 400)
 # Learning_rates=(0.5 0.1 0.05)
 
-DEPTHs=(15)
-L2_LEAF_REGs=(400)
-Learning_rates=(0.05)
+DEPTHs=(10)
+L2_LEAF_REGs=(100000)
+Learning_rates=(1)
 
 for direction in "${DIRS[@]}"
 do
