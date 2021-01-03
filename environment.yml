@@ -19,6 +19,7 @@ dependencies:
 - catboost==0.24
 - graphviz
 - python-graphviz
+- scikit-learn 
 - pip==20.1.1
 - pip:
         - dolphindb==0.1.15.20

@@ -28,6 +28,73 @@ import pandas as pd
 
 # %%
 from model import get_model, get_train_test_pools, get_precision_recall, load_model, get_model_path
+from catboost import CatBoostRegressor
+
+# %%
+# path = get_model_path(N, DIRECTION)
+# model = load_model(path)
+
+# %%
+import os
+from prepare_X import get_featrues, specs
+from turnpt_analysis import get_df_turnpt_measures
+
+
+import pickle, io
+import pandas as pd
+import numpy as np
+from catboost import CatBoostClassifier, Pool
+from catboost import CatBoostRegressor
+
+
+# %%
+# X
+CACHE=True
+ADD_DIFF = 0
+PCT_TRAIN = 0.75
+df_features = get_featrues(specs, cache=CACHE, add_diff=ADD_DIFF)
+df_features.index = df_features.index.date
+df_features = df_features.shift(1)
+
+# y
+df_y = get_df_turnpt_measures(N).fillna(0)
+df_y.index = df_y.tx_datetime
+
+df_chosen_y = df_y[[DIRECTION]] # before the close of t, the agent will decide whether to enter the market by predicting if t close is a turning point 
+assert type(df_chosen_y.index.values[0]) == type(df_features.index.values[0])
+
+df_chosen_y[DIRECTION] = np.where(df_chosen_y[DIRECTION]==-1, 2, df_chosen_y[DIRECTION])
+
+### DATA ###
+df = df_chosen_y.join(df_features).dropna()
+w = (
+df[[DIRECTION]].join(df_y.prc_diff).
+assign(weight = lambda x: np.where(x.is_turnpt!=0, x.prc_diff.abs(), np.nan)).
+assign(weight = lambda x: 1+x.weight.fillna(0)).
+#     assign(weight = lambda x: x.weight.fillna(x.weight.quantile(WEIGHTS_QUNATILE))).
+weight
+)
+num_train = int(df.shape[0] * PCT_TRAIN)# DONE
+
+y = df[DIRECTION] # DONE
+y_train = y[: num_train]
+y_test = y[num_train:]
+
+w_train = w[: num_train]
+w_test = w[num_train:]
+
+X = df.iloc[:, 1:]
+X_train = X.iloc[:num_train, :]
+X_test = X.iloc[num_train:, :]
+
+train_pool = Pool(X_train, y_train, weight=w_train)
+test_pool = Pool(X_test, y_test, weight=w_test)
+
+# %%
+# %%time
+# train_pool, test_pool =  get_train_test_pools(N,DIRECTION, WEIGHTS_QUNATILE, CACHE=True)
+# best_iter = next(map(lambda x: len(x[1])-1, model.eval_metrics(train_pool,['Precision']).items()))
+# model.plot_tree(best_iter)
 
 # %%
 # %%time
@@ -35,22 +102,27 @@ N=5
 DIRECTION='is_turnpt'
 WEIGHTS_QUNATILE = 0.01
 
-model = get_model(N, DIRECTION, WEIGHTS_QUNATILE, DEPTH=10, LEARNING_RATE=1, L2_LEAF_REG=10*5, OD_WAIT=50, CACHE=True, ADD_DIFF=False)
-# path = get_model_path(N, DIRECTION)
-# model = load_model(path)
+model = CatBoostClassifier(iterations=10**5, # set very large number and set early stops
+                          depth=10, #fine-tune
+                          learning_rate=0.1, #max: 0.5
+                          loss_function='MultiClass', 
+                          l2_leaf_reg = 202, #fine-tune
+                          od_type = 'Iter',
+                          od_wait = 250,
+#                           subsample = 0.3,
+                          rsm = 0.95,
+                           random_strength = 0.95,
+                           bagging_temperature = 19.95
+                          )
+
+model.fit(train_pool, eval_set=test_pool)
 
 # %%
-# %%time
-train_pool, test_pool =  get_train_test_pools(N,DIRECTION, WEIGHTS_QUNATILE, CACHE=True)
-# best_iter = next(map(lambda x: len(x[1])-1, model.eval_metrics(train_pool,['Precision']).items()))
-# model.plot_tree(best_iter)
+# print('training pool')
+# get_precision_recall(model, train_pool)
 
-# %%
-print('training pool')
-get_precision_recall(model, train_pool)
-
-print('testing pool')
-get_precision_recall(model, test_pool)
+# print('testing pool')
+# get_precision_recall(model, test_pool)
 
 # %%
 df_pred = (

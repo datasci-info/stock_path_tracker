@@ -19,6 +19,7 @@ from findataflow.dataprocs import resample as resampler
 
 # %%
 import pandas as pd
+import os
 
 # %%
 specs = []
@@ -336,22 +337,26 @@ def get_single_feature(spec):
     return df_feature
 
 def get_featrues(specs, nlags=5, cache=False, add_diff=False):
-    if not cache:
-        df_features = pd.concat([
-            get_single_feature(spec).pipe(fg.extend_by_nlags, spec='', nlags=nlags)
-            for spec in specs
-        ], axis=1)
+    cache_file = 'X.csv'
+    if cache:
+        if os.path.exists(cache_file):
+            df_features = pd.read_csv(cache_file, index_col=0)
+            df_features.index = pd.to_datetime(df_features.index, format='%Y-%m-%d %H:%M:%S')
+            return df_features
+        
+    df_features = pd.concat([
+        get_single_feature(spec).pipe(fg.extend_by_nlags, spec='', nlags=nlags)
+        for spec in specs
+    ], axis=1)
 
-        colnames = []
-        for idx_spec in range(len(specs)):
-            colnames += list(map(lambda x: f'{idx_spec}_{x}', df_features.columns[idx_spec*nlags: (idx_spec+1)*nlags]))
-        df_features.columns = colnames
-        if add_diff:
-            df_features = add_diff(df_features)
-        df_features.to_csv('X.csv', index=True)
-    else:
-        df_features = pd.read_csv('X.csv', index_col=0)
-        df_features.index = pd.to_datetime(df_features.index, format='%Y-%m-%d %H:%M:%S')
+    colnames = []
+    for idx_spec in range(len(specs)):
+        colnames += list(map(lambda x: f'{idx_spec}_{x}', df_features.columns[idx_spec*nlags: (idx_spec+1)*nlags]))
+    df_features.columns = colnames
+    
+    if add_diff:
+        df_features = add_diff(df_features)
+    df_features.to_csv(cache_file, index=True)
     return df_features
 
 from itertools import combinations
